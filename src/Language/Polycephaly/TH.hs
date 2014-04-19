@@ -6,26 +6,33 @@
     , ScopedTypeVariables
     , NoMonomorphismRestriction
  #-}
----------------------------------------------------------------------------
--- Tools for automatic generation of 'fake unification' of constraints,
--- a la http://www.haskell.org/haskellwiki/GHC/AdvancedOverlap
---
--- The objective is to be able to write something such as this:
---
---    class Print a where
---        print :: a -> IO ()
---
---    instance Show a => Print a where
---        print x = putStrLn (show x)
---    instance           Print a where
---        print x = putStrLn "No show method"
---
--- Conventions:
---    * The class whose instances we want to "duplicate" (`Print` in thw
---    example above) is called the 'instance-head class'.
---    * The class that is created behind the scenes to allow for this
---    (`Print'` in the link above) is called the 'flag-dispatch class'
----------------------------------------------------------------------------
+{-|
+Module      : Language.Polycephaly.TH
+Description : Polycephalous-instances code generation
+Copyright   : (c) Julian K. Arni, 2014
+License     : BSD3
+Maintainer  : jkarni@gmail.com
+Stability   : experimental
+
+ Tools for automatic generation of 'fake unification' of constraints,
+ a la http://www.haskell.org/haskellwiki/GHC/AdvancedOverlap
+
+ The objective is to be able to write something such as this:
+
+    class Print a where
+        print :: a -> IO ()
+
+    instance Show a => Print a where
+        print x = putStrLn (show x)
+    instance           Print a where
+        print x = putStrLn "No show method"
+
+ Conventions:
+    * The class whose instances we want to "duplicate" (`Print` in thw
+    example above) is called the 'instance-head class'.
+    * The class that is created behind the scenes to allow for this
+    (`Print'` in the link above) is called the 'flag-dispatch class'
+-}
 module Language.Polycephaly.TH where
 
 
@@ -45,10 +52,14 @@ import Language.Polycephaly.Typecast
 data HTrue
 data HFalse
 
+-- | Rewrite rules for the names of auxiliary classes. Note that even
+-- though this means there might be name collisions, it allows library
+-- users to add custom instances for the intermediate classes.
 data RewriteRules = RewriteRules
-    { rulePred :: String -> String
-    , ruleHelpers :: String -> String   -- TODO: Consider name collisions
-    , trueType :: Name        -- TODO: Allow more than two pred results
+    { rulePred :: String -> String      -- ^ How to name the shadow predicate
+    , ruleHelpers :: String -> String   -- ^ How to name the flag-dispatch class
+                                        -- TODO: Consider name collisions
+    , trueType :: Name
     , falseType :: Name
     }
 
@@ -66,7 +77,10 @@ defaultRules = RewriteRules { rulePred = (++ "Pred")
 --   instance.
 ---------------------------------------------------------------------------
 
-mkFlagDC :: RewriteRules -> Dec -> Dec
+-- | Make flag dispatch class.
+mkFlagDC :: RewriteRules   -- ^ The rewrite rules to use
+         -> Dec            -- ^ The original class declaration
+         -> Dec            -- ^ The new flag-dispatch class
 mkFlagDC rr (ClassD ctx name tvb fnDps decs) =
         let rn x  = mkName $ ruleHelpers rr $ nameBase x
             nameN = rn name
@@ -103,7 +117,7 @@ remakeCDec typ = do
         ClassI cdec _ <- reify typ
         return $ [changeCDec defaultRules cdec]
 
--- Make a pred class declaration from a normal class declaration.
+-- | Make a pred class declaration from a normal class declaration.
 -- Note that right now kinded variables aren't dealt with properly.
 changeCDec :: RewriteRules -> Dec -> Dec
 changeCDec rr (ClassD ctx name tyVs fnDp _dec) =
@@ -124,7 +138,7 @@ changeCDec rr (ClassD ctx name tyVs fnDp _dec) =
 -- This should output something like:
 -- TODO: Clean up variable renaming and move to test module.
 -- >> [ClassD [] NPred [PlainTV a_4,PlainTV flag] [FunDep [a_4] [flag]] []]
-{-sanityCheck = (fmap $ map (changeCDec defaultRules)) (runQ [d| class N a where|])-}
+sanityCheck = (fmap $ map (changeCDec defaultRules)) (runQ [d| class N a where|])
 
 withFreshNames :: Name -> (StateT (Map.Map Name Name) Q Name)
 withFreshNames k = do
@@ -136,7 +150,7 @@ withFreshNames k = do
                 modify $ Map.insert k nn
                 return nn
 
--- Return all instances of a class.
+-- | Return all instances of a class.
 -- Note that these include only instances that are visible where the
 -- function is called!
 getInstances :: Name -> Q [InstanceDec]
