@@ -40,11 +40,13 @@ import Control.Monad.Trans.Class
 import Data.Maybe (fromJust)
 import Control.Monad.Trans.State
 import Language.Haskell.TH
-import Language.Haskell.TH.Syntax (newName, Quasi)
+import Language.Haskell.TH.Syntax (Quasi)
 import qualified Data.Map.Strict as Map
 import Data.Generics
 
+
 import Language.Polycephaly.Typecast
+import Language.Polycephaly.Utils
 ---------------------------------------------------------------------------
 -- Basic Types
 --
@@ -91,6 +93,7 @@ mkFlagDC rr (ClassD ctx name tvb fnDps decs) =
             decRew (SigD n t) = SigD (rn n) (AppT (AppT ArrowT (VarT (mkName "flag"))) t)
             decRew a = a
         in ClassD ctx nameN tvbN fnDps (map decRew decs)
+mkFlagDC _ _ = notCDec "mkFlagDC"
 
 
 -- | Make instance-head class instance
@@ -99,10 +102,10 @@ mkFlagDC rr (ClassD ctx name tvb fnDps decs) =
 -- instance (ShowPred a flag, Print' flag a) => Print a where
 --      print = print' (undefined::flag)
 mkIHCI :: RewriteRules -> Dec -> Dec
-mkIHCI rr (ClassD ctx name tv fnDps decs) =
+mkIHCI rr (ClassD ctx name tv _fnDps decs) =
         let rn x  = mkName $ ruleHelpers rr $ nameBase x
-            newPredCls (ClassP name typs) = ClassP (mkName $ (rulePred rr) (nameBase name))
-                                                   (typs ++ [VarT $ mkName "flag"])
+            newPredCls (ClassP n typs) = ClassP (rn n) (typs ++ [VarT $ mkName "flag"])
+            newPredCls _               = error "'~' not yet supported"
             ictx  = map newPredCls ctx
             tyVarBndrName (PlainTV n) = VarT n
             tyVarBndrName (KindedTV n _) = VarT n   -- TODO: Fix this kind
@@ -111,6 +114,7 @@ mkIHCI rr (ClassD ctx name tv fnDps decs) =
                                                     -- into its own fn.
             ityp = foldr AppT (ConT name) (map tyVarBndrName tv)
         in InstanceD ictx ityp decs
+mkIHCI _ _ = notCDec "mkICHI"
 ---------------------------------------------------------------------------
 -- Pred Instances
 --
@@ -149,10 +153,12 @@ changeCDec rr (ClassD ctx name tyVs fnDp _dec) =
         newFnDp = (FunDep tyNs [flag]):fnDp
         newTyVs = map PlainTV $ tyNs ++ [flag]  -- TODO: allow kinded.
     in ClassD ctx nName newTyVs newFnDp []
+changeCDec _ _ = notCDec "changeCDec"
 
 -- This should output something like:
 -- TODO: Clean up variable renaming and move to test module.
 -- >> [ClassD [] NPred [PlainTV a_4,PlainTV flag] [FunDep [a_4] [flag]] []]
+sanityCheck :: Q [Dec]
 sanityCheck = (fmap $ map (changeCDec defaultRules)) (runQ [d| class N a where|])
 
 withFreshNames :: Name -> (StateT (Map.Map Name Name) Q Name)
@@ -202,9 +208,8 @@ changeN toChange rr input = let
 addFlag :: RewriteRules -> Dec -> Dec
 addFlag rr (InstanceD ctx typ decs) = InstanceD ctx (AppT typ flag) decs
     where flag = ConT $ trueType rr
+addFlag _ _ = notCDec "addFlag"
 
-makeClass' :: Name -> RewriteRules -> Dec
-makeClass' n rr = ClassD [] n [] [FunDep [] []] []
 
 -- HFalse case
 {-mkNegInst :: Name -> RewriteRules -> Dec-}
