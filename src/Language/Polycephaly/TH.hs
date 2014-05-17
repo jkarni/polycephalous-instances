@@ -78,6 +78,9 @@ defaultRules = RewriteRules { rulePred = (++ "Pred")
 ---------------------------------------------------------------------------
 
 -- | Make flag dispatch class.
+-- >> let clsD = runQ [d| class Print a where { print :: a -> IO () } |]
+-- >> mkFlagDC defaultRules clsD
+-- class Print' flag a where { print' :: flag -> a -> IO () }
 mkFlagDC :: RewriteRules   -- ^ The rewrite rules to use
          -> Dec            -- ^ The original class declaration
          -> Dec            -- ^ The new flag-dispatch class
@@ -90,18 +93,24 @@ mkFlagDC rr (ClassD ctx name tvb fnDps decs) =
         in ClassD ctx nameN tvbN fnDps (map decRew decs)
 
 
--- TODO: Convince yourself this is right.
-mkIHCI :: RewriteRules -> Name -> Dec -> Dec
-mkIHCI rr dispatchCls (ClassD ctx name tv fnDps decs) =
+-- | Make instance-head class instance
+-- >> mkIHCI defaultRulese (runQ [d| instance Show a => Print a where
+--      print x = putStrLn (show x) |])
+-- instance (ShowPred a flag, Print' flag a) => Print a where
+--      print = print' (undefined::flag)
+mkIHCI :: RewriteRules -> Dec -> Dec
+mkIHCI rr (ClassD ctx name tv fnDps decs) =
         let rn x  = mkName $ ruleHelpers rr $ nameBase x
-            {-ictx  = dispatchCls-}                 -- TODO
+            newPredCls (ClassP name typs) = ClassP (mkName $ (rulePred rr) (nameBase name))
+                                                   (typs ++ [VarT $ mkName "flag"])
+            ictx  = map newPredCls ctx
             tyVarBndrName (PlainTV n) = VarT n
             tyVarBndrName (KindedTV n _) = VarT n   -- TODO: Fix this kind
                                                     --- dropping.
                                                     -- And factor this out
                                                     -- into its own fn.
             ityp = foldr AppT (ConT name) (map tyVarBndrName tv)
-        in InstanceD ctx ityp decs
+        in InstanceD ictx ityp decs
 ---------------------------------------------------------------------------
 -- Pred Instances
 --
@@ -119,6 +128,12 @@ remakeCDec typ = do
 
 -- | Make a pred class declaration from a normal class declaration.
 -- Note that right now kinded variables aren't dealt with properly.
+-- Examples:
+--
+-- >>> comp = runQ [d| class SimplePred a flag | a -> flag where {}]
+-- >>> class Simple a where { simpl :: a -> a }
+-- >>> changeCDec defaultRules ''Simple == comp
+-- True
 changeCDec :: RewriteRules -> Dec -> Dec
 changeCDec rr (ClassD ctx name tyVs fnDp _dec) =
     let nName = mkName $ (rulePred rr) (nameBase name)
