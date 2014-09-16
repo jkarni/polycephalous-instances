@@ -33,7 +33,7 @@ Stability   : experimental
     * The class that is created behind the scenes to allow for this
     (`Print'` in the link above) is called the 'flag-dispatch class'
 -}
-module Language.Polycephaly.TH where
+module Language.Haskell.Polycephaly.TH where
 
 
 import Control.Monad.Trans.Class
@@ -45,8 +45,8 @@ import qualified Data.Map.Strict as Map
 import Data.Generics
 
 
-import Language.Polycephaly.Typecast
-import Language.Polycephaly.Utils
+import Language.Haskell.Polycephaly.Typecast
+import Language.Haskell.Polycephaly.Utils
 ---------------------------------------------------------------------------
 -- Basic Types
 --
@@ -107,12 +107,12 @@ mkIHCI rr (ClassD ctx name tv _fnDps decs) =
             newPredCls (ClassP n typs) = ClassP (rn n) (typs ++ [VarT $ mkName "flag"])
             newPredCls _               = error "'~' not yet supported"
             ictx  = map newPredCls ctx
-            tyVarBndrName (PlainTV n) = VarT n
+            tyVarBndrName (PlainTV n)    = VarT n
             tyVarBndrName (KindedTV n _) = VarT n   -- TODO: Fix this kind
                                                     --- dropping.
                                                     -- And factor this out
                                                     -- into its own fn.
-            ityp = foldr AppT (ConT name) (map tyVarBndrName tv)
+            ityp  = foldr AppT (ConT name) (map tyVarBndrName tv)
         in InstanceD ictx ityp decs
 mkIHCI _ _ = notCDec "mkICHI"
 ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 ---------------------------------------------------------------------------
 -- TypeCast from HList.
 ---------------------------------------------------------------------------
-module Language.Polycephaly.Typecast where
+module Language.Haskell.Polycephaly.Typecast where
 
 class TypeCast   a b   | a -> b, b->a   where typeCast   :: a -> b
 class TypeCast'  t a b | t a -> b, t b -> a where typeCast'  :: t->a->b

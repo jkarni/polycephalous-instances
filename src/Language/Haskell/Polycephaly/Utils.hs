@@ -9,7 +9,7 @@ Maintainer  : jkarni@gmail.com
 Stability   : experimental
 -}
 
-module Language.Polycephaly.Utils where
+module Language.Haskell.Polycephaly.Utils where
 
 
 
